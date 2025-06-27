@@ -44,7 +44,8 @@ HTTP Trigger Function (Result Retrieval)
 - **Runtime**: Azure Functions (.NET 8)
 - **Orchestration**: Azure Durable Functions
 - **Storage**: Azure Blob Storage (documents/results), Azure Table Storage (metadata)
-- **AI/ML**: Azure AI Document Intelligence (文書解析) + Azure OpenAI Service (意味理解・判定)
+- **AI/ML**: Azure AI Document Intelligence (文書解析) + Azure OpenAI Service (意味理解・判定・RAG)
+- **RAG**: Azure OpenAI Assistants API + file_search機能
 - **Monitoring**: Application Insights
 - **Authentication**: Azure AD
 
@@ -52,9 +53,11 @@ HTTP Trigger Function (Result Retrieval)
 
 **選択理由**: Document Intelligenceの高精度な文書構造解析と、OpenAI Serviceの高度な意味理解を組み合わせることで、最適な契約書解析を実現。
 
-### 処理フロー
+### 処理フロー（RAG統合）
 ```
-PDF契約書 → Document Intelligence → 構造化データ → OpenAI Service → リース判定
+PDF契約書 → Document Intelligence → 構造化データ → OpenAI Assistants (RAG) → 根拠付きリース判定
+                                                          ↑
+                                              公的基準文書 (IFRS 16/ASC 842)
 ```
 
 ### 各段階の役割
@@ -63,10 +66,11 @@ PDF契約書 → Document Intelligence → 構造化データ → OpenAI Service
    - テーブル、リスト、セクションの構造化
    - メタデータ（ページ、座標）の抽出
 
-2. **OpenAI Service**:
+2. **OpenAI Service (RAG統合)**:
    - 契約内容の意味理解
    - IFRS 16/ASC 842基準に基づく判定
    - 複雑な契約条項の解釈
+   - 公的基準文書の自動参照・引用
 
 ## APIエンドポイント設計
 
@@ -401,6 +405,158 @@ Client Request → Analysis API → Durable Function Orchestrator
 3. **構造化**: 段階的な処理による品質向上
 4. **デバッグ容易**: 各フェーズの結果を個別に確認可能
 5. **コスト効率**: 必要な部分のみでOpenAI APIを使用
+
+## RAG（Retrieval-Augmented Generation）実装
+
+### アーキテクチャ
+```
+Contract Analysis ←→ OpenAI Assistants API
+                          ↓ file_search
+                    Reference Documents
+                    ├─ IFRS 16 (PDF)
+                    ├─ ASC 842 (PDF)  
+                    ├─ 企業会計基準第13号 (PDF)
+                    └─ 実務指針・FAQ (PDF)
+```
+
+### 実装方式: Azure OpenAI Assistants API
+
+**選択理由:**
+- シンプルで確実な実装が可能
+- ファイルアップロード機能が統合済み
+- file_search機能による自動文書検索
+- Bicep/ARMでの完全なCI/CD対応
+
+### RAG機能詳細
+
+#### 1. 参照文書管理
+```csharp
+// 初期セットアップ（CI/CD時）
+var assistantClient = new AssistantClient();
+var assistant = await assistantClient.CreateAssistantAsync(new AssistantCreationOptions
+{
+    Name = "LeaseAnalysisAssistant",
+    Instructions = "IFRS 16およびASC 842に基づく契約書のリース判定を行う",
+    Tools = { new FileSearchToolDefinition() }
+});
+
+// 参照文書アップロード
+var vectorStore = await assistantClient.CreateVectorStoreAsync(new VectorStoreCreationOptions
+{
+    Name = "AccountingStandards"
+});
+
+// IFRS 16, ASC 842等の基準文書をアップロード
+await assistantClient.AddFileToVectorStoreAsync(vectorStore.Id, ifrs16FileId);
+await assistantClient.AddFileToVectorStoreAsync(vectorStore.Id, asc842FileId);
+```
+
+#### 2. 契約書解析時のRAG活用
+```csharp
+[FunctionName("LeaseClassifier")]
+public static async Task<LeaseClassification> ClassifyLease(
+    [ActivityTrigger] StructuredContent content,
+    ILogger log)
+{
+    var threadClient = new AssistantClient();
+    
+    // 契約書分析スレッド作成
+    var thread = await threadClient.CreateThreadAsync(new ThreadCreationOptions
+    {
+        ToolResources = new ToolResources
+        {
+            FileSearch = new FileSearchToolResources
+            {
+                VectorStoreIds = { accountingStandardsVectorStoreId }
+            }
+        }
+    });
+    
+    // 契約書内容と分析要求を送信
+    await threadClient.CreateMessageAsync(thread.Id, MessageRole.User,
+        $"以下の契約書がリース契約に該当するか判定してください。\n\n{content.ToAnalysisText()}");
+    
+    // Assistant実行（自動的に参照文書を検索・引用）
+    var run = await threadClient.CreateRunAsync(thread.Id, assistantId);
+    var result = await WaitForCompletionAsync(run);
+    
+    return ParseLeaseClassificationWithCitations(result);
+}
+```
+
+### 参照文書
+#### 必須文書
+- **IFRS 16**: リース会計に関する国際財務報告基準
+- **ASC 842**: 米国会計基準でのリース会計基準
+- **企業会計基準第13号**: 日本のリース取引に関する会計基準
+
+#### 補助文書
+- **IFRS 16 実務指針**: 具体的な適用例とFAQ
+- **ASC 842 実務ガイダンス**: 業種別適用事例
+- **日本基準 リース適用指針**: 日本特有の取り扱い
+
+### 出力例（根拠付き判定）
+
+```json
+{
+  "isLease": true,
+  "confidence": 0.92,
+  "leaseType": "OperatingLease",
+  "analysis": {
+    "identifiedAsset": {
+      "conclusion": "特定された資産が存在",
+      "evidence": "IFRS 16.B13に定める「物理的に区別される資産」に該当",
+      "citations": ["IFRS 16 paragraph B13", "ASC 842-10-15-13"]
+    },
+    "rightToControl": {
+      "conclusion": "使用権の制御が存在", 
+      "evidence": "借手が資産の使用方法と目的を指示する権利を有する",
+      "citations": ["IFRS 16.B9(a)", "ASC 842-10-15-3(a)"]
+    }
+  },
+  "recommendations": [
+    "IFRS 16に基づく使用権資産の認識が必要",
+    "リース負債の初期測定を実施（IFRS 16.26参照）"
+  ]
+}
+```
+
+### CI/CDでの自動化
+
+#### Bicep展開
+```bicep
+// Azure OpenAI Service
+resource openAIAccount 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
+  name: 'leaselogic-openai'
+  location: location
+  kind: 'OpenAI'
+  sku: { name: 'S0' }
+  properties: {
+    customSubDomainName: 'leaselogic-openai'
+  }
+}
+
+// GPT-4 deployment
+resource gpt4Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
+  parent: openAIAccount
+  name: 'gpt-4'
+  properties: {
+    model: { format: 'OpenAI', name: 'gpt-4', version: '0613' }
+    scaleSettings: { scaleType: 'Standard' }
+  }
+}
+```
+
+#### GitHub Actions自動化
+```yaml
+- name: Setup Accounting Standards
+  run: |
+    # 参照文書をBlob Storageにアップロード
+    az storage blob upload --file ./standards/IFRS-16.pdf --name ifrs16.pdf
+    
+    # OpenAI Assistantセットアップ
+    dotnet run --project ./setup -- create-assistant
+```
 
 ### 3. 結果取得フロー
 

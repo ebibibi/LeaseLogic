@@ -6,7 +6,7 @@ public class AnalysisResult
 {
     public string AnalysisId { get; set; } = string.Empty;
     public FileInfo FileInfo { get; set; } = new();
-    public LeaseAnalysis AnalysisResult { get; set; } = new();
+    public LeaseAnalysis Analysis { get; set; } = new();
     public string DocumentSummary { get; set; } = string.Empty;
     public TimeSpan ProcessingTime { get; set; }
     public DateTime CompletedAt { get; set; }
@@ -25,7 +25,7 @@ public class LeaseAnalysis
     public double Confidence { get; set; }
     public LeaseType LeaseType { get; set; }
     public ContractSummary Summary { get; set; } = new();
-    public DetailedLeaseAnalysis LeaseAnalysis { get; set; } = new();
+    public DetailedLeaseAnalysis DetailedAnalysis { get; set; } = new();
     public List<string> KeyFindings { get; set; } = new();
     public List<string> RiskFactors { get; set; } = new();
     public List<string> Recommendations { get; set; } = new();

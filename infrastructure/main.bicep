@@ -14,13 +14,13 @@ param openAILocation string = 'eastus'
 var projectName = 'leaselogic'
 var namePrefix = '${projectName}-${environment}-${uniqueSuffix}'
 
-// Resource names
-var storageAccountName = replace('${namePrefix}storage', '-', '')
+// Resource names (ensuring naming compliance)
+var storageAccountName = 'leaselogic${environment}${substring(uniqueSuffix, 0, 8)}st'
 var functionAppName = '${namePrefix}-func'
 var appServicePlanName = '${namePrefix}-plan'
 var appInsightsName = '${namePrefix}-insights'
 var logAnalyticsName = '${namePrefix}-logs'
-var keyVaultName = '${namePrefix}-kv'
+var keyVaultName = 'leaselogic${environment}${substring(uniqueSuffix, 0, 6)}kv'
 var openAIAccountName = '${namePrefix}-openai'
 var documentIntelligenceName = '${namePrefix}-docint'
 
@@ -140,7 +140,7 @@ resource openAIAccount 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   }
 }
 
-// GPT-4 Deployment
+// GPT-4 Deployment (using latest supported version)
 resource gpt4Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
   parent: openAIAccount
   name: 'gpt-4'
@@ -148,7 +148,7 @@ resource gpt4Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-0
     model: {
       format: 'OpenAI'
       name: 'gpt-4'
-      version: '0613'
+      version: '0125-Preview'
     }
     scaleSettings: {
       scaleType: 'Standard'
@@ -207,16 +207,16 @@ resource documentIntelligence 'Microsoft.CognitiveServices/accounts@2023-05-01' 
   }
 }
 
-// App Service Plan (Premium for Durable Functions)
+// App Service Plan (Basic B1 for Southeast Asia deployment)
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: appServicePlanName
   location: location
   sku: {
-    name: 'EP1'
-    tier: 'ElasticPremium'
+    name: 'B1'
+    tier: 'Basic'
   }
   properties: {
-    maximumElasticWorkerCount: 10
+    reserved: false
   }
 }
 

@@ -18,7 +18,7 @@ public class LeaseAnalysisOrchestrator
     public async Task<AnalysisResult> RunOrchestrator(
         [OrchestrationTrigger] TaskOrchestrationContext context)
     {
-        var logger = context.CreateReplaySafeLogger(_logger);
+        var logger = context.CreateReplaySafeLogger("LeaseAnalysisOrchestrator");
         var input = context.GetInput<AnalysisRequest>();
 
         if (input == null)
@@ -103,7 +103,7 @@ public class LeaseAnalysisOrchestrator
             });
 
             logger.LogInformation("Completed lease analysis orchestration for file: {FileId}, Result: {IsLease}", 
-                input.FileId, result.AnalysisResult.IsLease);
+                input.FileId, result.Analysis.IsLease);
 
             return result;
         }

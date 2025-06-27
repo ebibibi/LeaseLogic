@@ -74,7 +74,7 @@ public class AnalysisFunctions
             {
                 AnalysisId = instanceId,
                 Status = "Running",
-                FileInfo = new FileInfo
+                FileInfo = new Models.FileInfo
                 {
                     FileName = analysisRequest.FileName,
                     FileSize = analysisRequest.FileSize

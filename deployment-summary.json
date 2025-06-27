@@ -1,0 +1,9 @@
+{
+    "deploymentDate": "2025-06-27T12:25:05Z",
+    "resourceGroupName": "LeaseLogic",
+    "location": "southeastasia",
+    "environment": "dev",
+    "functionAppName": "leaselogic-dev-leaselog187-func",
+    "functionAppUrl": "https://leaselogic-dev-leaselog187-func.azurewebsites.net",
+    "status": "completed"
+}

@@ -152,9 +152,8 @@ if ! az account show > /dev/null 2>&1; then
     exit 1
 fi
 
-ACCOUNT_INFO=$(az account show --query "{subscriptionId:id, tenantId:tenantId, user:user.name}" -o json)
-SUBSCRIPTION_ID=$(echo $ACCOUNT_INFO | jq -r '.subscriptionId')
-USER_NAME=$(echo $ACCOUNT_INFO | jq -r '.user')
+SUBSCRIPTION_ID=$(az account show --query "id" -o tsv)
+USER_NAME=$(az account show --query "user.name" -o tsv)
 print_success "Logged in as: $USER_NAME"
 print_status "Subscription: $SUBSCRIPTION_ID"
 
@@ -199,23 +198,22 @@ if [ "$SKIP_INFRASTRUCTURE" = false ]; then
         --name "$DEPLOYMENT_NAME" \
         --template-file "main.bicep" \
         --parameters environment="$ENVIRONMENT" location="$LOCATION" \
-        --query "{provisioningState:properties.provisioningState, outputs:properties.outputs}" \
         --output json)
     
-    PROVISIONING_STATE=$(echo $DEPLOYMENT_RESULT | jq -r '.provisioningState')
+    PROVISIONING_STATE=$(echo $DEPLOYMENT_RESULT | grep -o '"provisioningState":"[^"]*"' | cut -d '"' -f 4)
     
     if [ "$PROVISIONING_STATE" = "Succeeded" ]; then
         print_success "Infrastructure deployment completed successfully!"
         
-        # Extract outputs
-        FUNCTION_APP_NAME=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.functionAppName.value')
-        FUNCTION_APP_URL=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.functionAppUrl.value')
-        FRONTEND_WEB_APP_NAME=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.frontendWebAppName.value')
-        FRONTEND_WEB_APP_URL=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.frontendWebAppUrl.value')
-        STORAGE_ACCOUNT_NAME=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.storageAccountName.value')
-        OPENAI_ENDPOINT=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.openAIEndpoint.value')
-        DOC_INTEL_ENDPOINT=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.documentIntelligenceEndpoint.value')
-        KEY_VAULT_URI=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.keyVaultUri.value')
+        # Extract outputs using az cli queries
+        FUNCTION_APP_NAME=$(az deployment group show --resource-group "$RESOURCE_GROUP_NAME" --name "$DEPLOYMENT_NAME" --query "properties.outputs.functionAppName.value" -o tsv)
+        FUNCTION_APP_URL=$(az deployment group show --resource-group "$RESOURCE_GROUP_NAME" --name "$DEPLOYMENT_NAME" --query "properties.outputs.functionAppUrl.value" -o tsv)
+        FRONTEND_WEB_APP_NAME=$(az deployment group show --resource-group "$RESOURCE_GROUP_NAME" --name "$DEPLOYMENT_NAME" --query "properties.outputs.frontendWebAppName.value" -o tsv)
+        FRONTEND_WEB_APP_URL=$(az deployment group show --resource-group "$RESOURCE_GROUP_NAME" --name "$DEPLOYMENT_NAME" --query "properties.outputs.frontendWebAppUrl.value" -o tsv)
+        STORAGE_ACCOUNT_NAME=$(az deployment group show --resource-group "$RESOURCE_GROUP_NAME" --name "$DEPLOYMENT_NAME" --query "properties.outputs.storageAccountName.value" -o tsv)
+        OPENAI_ENDPOINT=$(az deployment group show --resource-group "$RESOURCE_GROUP_NAME" --name "$DEPLOYMENT_NAME" --query "properties.outputs.openAIEndpoint.value" -o tsv)
+        DOC_INTEL_ENDPOINT=$(az deployment group show --resource-group "$RESOURCE_GROUP_NAME" --name "$DEPLOYMENT_NAME" --query "properties.outputs.documentIntelligenceEndpoint.value" -o tsv)
+        KEY_VAULT_URI=$(az deployment group show --resource-group "$RESOURCE_GROUP_NAME" --name "$DEPLOYMENT_NAME" --query "properties.outputs.keyVaultUri.value" -o tsv)
         
         print_status "Deployment outputs:"
         print_status "  Function App: $FUNCTION_APP_NAME"
@@ -252,7 +250,7 @@ else
     
     # Try to read existing outputs
     if [ -f "infrastructure/deployment-outputs.json" ]; then
-        FUNCTION_APP_NAME=$(jq -r '.functionAppName' infrastructure/deployment-outputs.json)
+        FUNCTION_APP_NAME=$(grep -o '"functionAppName":"[^"]*"' infrastructure/deployment-outputs.json | cut -d '"' -f 4)
         print_status "Using existing Function App: $FUNCTION_APP_NAME"
     else
         print_error "No existing deployment outputs found. Cannot determine Function App name."

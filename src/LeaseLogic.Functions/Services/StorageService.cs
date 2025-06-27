@@ -274,7 +274,7 @@ public class StorageService : IStorageService
             {
                 AnalysisId = analysisId,
                 Status = entity.GetString("Status") ?? "",
-                FileInfo = new FileInfo
+                FileInfo = new Models.FileInfo
                 {
                     FileName = entity.GetString("FileName") ?? "",
                     FileSize = entity.GetInt64("FileSize") ?? 0

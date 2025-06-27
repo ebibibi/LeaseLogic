@@ -1,0 +1,10 @@
+{
+    "functionAppName": "leaselogic-dev-leaselog187-func",
+    "functionAppUrl": "https://leaselogic-dev-leaselog187-func.azurewebsites.net",
+    "storageAccountName": "leaselogicdevleaselog187",
+    "openAIAccountName": "leaselogic-dev-leaselog187-openai",
+    "documentIntelligenceName": "leaselogic-dev-leaselog187-docint",
+    "keyVaultName": "leaselogicdevleaselog187",
+    "resourceGroupName": "LeaseLogic",
+    "location": "southeastasia"
+}

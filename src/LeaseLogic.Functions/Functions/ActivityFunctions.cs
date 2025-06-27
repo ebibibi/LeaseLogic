@@ -47,10 +47,15 @@ public class ActivityFunctions
             var client = new DocumentIntelligenceClient(new Uri(endpoint), new Azure.AzureKeyCredential(apiKey));
 
             // Analyze document using prebuilt-contract model
+            var content = new Azure.AI.DocumentIntelligence.AnalyzeDocumentContent()
+            {
+                Base64Source = BinaryData.FromString(Convert.ToBase64String(ReadStreamToBytes(fileStream)))
+            };
+            
             var operation = await client.AnalyzeDocumentAsync(
-                WaitUntil.Completed,
+                Azure.WaitUntil.Completed,
                 "prebuilt-contract",
-                fileStream);
+                content);
 
             var result = operation.Value;
 
@@ -230,13 +235,13 @@ public class ActivityFunctions
             var result = new AnalysisResult
             {
                 AnalysisId = request.FileId, // This should be the orchestration instance ID
-                FileInfo = new FileInfo
+                FileInfo = new Models.FileInfo
                 {
                     FileName = request.FileName,
                     FileSize = request.FileSize,
                     UploadedAt = DateTime.UtcNow
                 },
-                AnalysisResult = new LeaseAnalysis
+                Analysis = new LeaseAnalysis
                 {
                     IsLease = leaseClassification.IsLease,
                     Confidence = leaseClassification.Confidence,
@@ -248,7 +253,7 @@ public class ActivityFunctions
                         ContractPeriod = structuredContent.ContractPeriod.ToString(),
                         MonthlyPayment = structuredContent.PaymentTerms.ToString()
                     },
-                    LeaseAnalysis = new DetailedLeaseAnalysis
+                    DetailedAnalysis = new DetailedLeaseAnalysis
                     {
                         IdentifiedAsset = leaseClassification.IdentifiedAssetAnalysis,
                         RightToControl = leaseClassification.RightToControlAnalysis,
@@ -296,13 +301,13 @@ public class ActivityFunctions
             var result = new AnalysisResult
             {
                 AnalysisId = request.FileId,
-                FileInfo = new FileInfo
+                FileInfo = new Models.FileInfo
                 {
                     FileName = request.FileName,
                     FileSize = request.FileSize,
                     UploadedAt = DateTime.UtcNow
                 },
-                AnalysisResult = new LeaseAnalysis
+                Analysis = new LeaseAnalysis
                 {
                     IsLease = false,
                     Confidence = 0.0,
@@ -572,5 +577,12 @@ public class ActivityFunctions
             return months;
         }
         return 12; // Default to 1 year
+    }
+
+    private static byte[] ReadStreamToBytes(Stream stream)
+    {
+        using var memoryStream = new MemoryStream();
+        stream.CopyTo(memoryStream);
+        return memoryStream.ToArray();
     }
 }

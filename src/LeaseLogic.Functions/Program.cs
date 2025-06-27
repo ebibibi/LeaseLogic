@@ -8,14 +8,15 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 var host = new HostBuilder()
-    .ConfigureFunctionsWebApplication()
+    .ConfigureFunctionsWorkerDefaults()
     .ConfigureAppConfiguration((context, config) =>
     {
         // Add Key Vault configuration in production
         var keyVaultUri = Environment.GetEnvironmentVariable("KEY_VAULT_URI");
         if (!string.IsNullOrEmpty(keyVaultUri))
         {
-            config.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
+            // Key Vault integration can be added later
+            // config.AddAzureKeyVault(new Uri(keyVaultUri), new DefaultAzureCredential());
         }
     })
     .ConfigureServices((context, services) =>

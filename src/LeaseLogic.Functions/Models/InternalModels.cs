@@ -5,7 +5,7 @@ namespace LeaseLogic.Functions.Models;
 // Document Intelligence 結果モデル
 public class ParsedDocument
 {
-    public AnalyzeResult AnalyzeResult { get; set; } = new();
+    public AnalyzeResult? AnalyzeResult { get; set; }
     public string FileId { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
     public DateTime ParsedAt { get; set; } = DateTime.UtcNow;
@@ -119,7 +119,7 @@ public class AnalysisStatus
 {
     public string AnalysisId { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
-    public FileInfo FileInfo { get; set; } = new();
+    public Models.FileInfo FileInfo { get; set; } = new();
     public ProgressInfo Progress { get; set; } = new();
     public AnalysisResult? Result { get; set; }
     public DateTime CreatedTime { get; set; }

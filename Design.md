@@ -44,9 +44,29 @@ HTTP Trigger Function (Result Retrieval)
 - **Runtime**: Azure Functions (.NET 8)
 - **Orchestration**: Azure Durable Functions
 - **Storage**: Azure Blob Storage (documents/results), Azure Table Storage (metadata)
-- **AI/ML**: Azure OpenAI Service + Azure AI Document Intelligence
+- **AI/ML**: Azure AI Document Intelligence (文書解析) + Azure OpenAI Service (意味理解・判定)
 - **Monitoring**: Application Insights
 - **Authentication**: Azure AD
+
+## AI処理アプローチ（ハイブリッド方式）
+
+**選択理由**: Document Intelligenceの高精度な文書構造解析と、OpenAI Serviceの高度な意味理解を組み合わせることで、最適な契約書解析を実現。
+
+### 処理フロー
+```
+PDF契約書 → Document Intelligence → 構造化データ → OpenAI Service → リース判定
+```
+
+### 各段階の役割
+1. **Document Intelligence**: 
+   - 高精度なOCR・レイアウト解析
+   - テーブル、リスト、セクションの構造化
+   - メタデータ（ページ、座標）の抽出
+
+2. **OpenAI Service**:
+   - 契約内容の意味理解
+   - IFRS 16/ASC 842基準に基づく判定
+   - 複雑な契約条項の解釈
 
 ## APIエンドポイント設計
 
@@ -220,27 +240,27 @@ public static async Task<AnalysisResult> RunOrchestrator(
 {
     var input = context.GetInput<AnalysisRequest>();
     
-    // Step 1: Document Parsing (Blob Storageから取得)
-    context.SetCustomStatus(new { currentStep = "DocumentParsing", progress = 10, message = "文書解析開始" });
+    // Phase 1: Document Intelligence による構造化解析
+    context.SetCustomStatus(new { currentStep = "DocumentParsing", progress = 15, message = "Document Intelligence解析開始" });
     var parsedDocument = await context.CallActivityAsync<ParsedDocument>(
         "DocumentParser", input.FileId);
     
-    // Step 2: Text Extraction & Structure Analysis
-    context.SetCustomStatus(new { currentStep = "TextExtraction", progress = 30, message = "テキスト抽出中" });
-    var extractedContent = await context.CallActivityAsync<ExtractedContent>(
-        "TextExtractor", parsedDocument);
+    // Phase 2: 契約書固有の構造認識と前処理
+    context.SetCustomStatus(new { currentStep = "ContentStructuring", progress = 35, message = "契約書構造分析中" });
+    var structuredContent = await context.CallActivityAsync<StructuredContent>(
+        "ContentStructurer", parsedDocument);
     
-    // Step 3: AI-based Lease Classification
-    context.SetCustomStatus(new { currentStep = "AIAnalysis", progress = 60, message = "AI解析実行中" });
-    var classification = await context.CallActivityAsync<LeaseClassification>(
-        "LeaseClassifier", extractedContent);
+    // Phase 3: OpenAI による意味理解とリース判定
+    context.SetCustomStatus(new { currentStep = "AIAnalysis", progress = 70, message = "OpenAI Service リース判定実行中" });
+    var leaseClassification = await context.CallActivityAsync<LeaseClassification>(
+        "LeaseClassifier", structuredContent);
     
-    // Step 4: Report Generation
-    context.SetCustomStatus(new { currentStep = "ReportGeneration", progress = 90, message = "レポート生成中" });
+    // Phase 4: 最終レポート生成
+    context.SetCustomStatus(new { currentStep = "ReportGeneration", progress = 90, message = "総合レポート生成中" });
     var result = await context.CallActivityAsync<AnalysisResult>(
-        "ReportGenerator", new { input, extractedContent, classification });
+        "ReportGenerator", new { input, structuredContent, leaseClassification });
     
-    context.SetCustomStatus(new { currentStep = "Completed", progress = 100, message = "解析完了" });
+    context.SetCustomStatus(new { currentStep = "Completed", progress = 100, message = "ハイブリッド解析完了" });
     return result;
 }
 ```
@@ -255,22 +275,46 @@ public static async Task<ParsedDocument> ParseDocument(
     [Blob("documents/{fileId}", FileAccess.Read)] Stream documentStream,
     ILogger log)
 {
-    // Azure AI Document Intelligence使用
-    // Blob StorageからPDF/Word取得 → 構造化データ変換
-    // DocumentIntelligenceClient経由でOCRとレイアウト解析
+    // Azure AI Document Intelligence使用 (Phase 1)
+    // Blob StorageからPDF/Word取得 → Document Intelligence API
+    // 高精度OCR、レイアウト解析、テーブル・リスト構造化
+    // ページごとの座標情報付きでテキスト・構造データを抽出
+    
+    var documentIntelligenceClient = new DocumentIntelligenceClient();
+    var analyzedDocument = await documentIntelligenceClient.AnalyzeDocumentAsync(
+        "prebuilt-contract", documentStream);
+    
+    return new ParsedDocument
+    {
+        StructuredContent = analyzedDocument.Documents,
+        Pages = analyzedDocument.Pages,
+        Tables = analyzedDocument.Tables,
+        Paragraphs = analyzedDocument.Paragraphs
+    };
 }
 ```
 
-#### 2. TextExtractor
+#### 2. ContentStructurer
 ```csharp
-[FunctionName("TextExtractor")]
-public static async Task<ExtractedContent> ExtractText(
+[FunctionName("ContentStructurer")]
+public static async Task<StructuredContent> StructureContent(
     [ActivityTrigger] ParsedDocument document,
     ILogger log)
 {
-    // テキスト抽出と前処理
-    // 契約書固有の構造認識（条項、当事者、期間、支払条件等）
-    // 重要セクションの特定とメタデータ抽出
+    // Document Intelligence結果の後処理
+    // 契約書固有のセクション識別（当事者情報、契約条件、支払条件等）
+    // テーブルデータの意味づけ
+    // 重要な契約条項の抽出と分類
+    
+    return new StructuredContent
+    {
+        ContractParties = ExtractParties(document),
+        AssetDetails = ExtractAssetInfo(document),
+        PaymentTerms = ExtractPaymentTerms(document),
+        ContractPeriod = ExtractContractPeriod(document),
+        SpecialClauses = ExtractSpecialClauses(document),
+        RawContent = document.GetFullText()
+    };
 }
 ```
 
@@ -278,14 +322,28 @@ public static async Task<ExtractedContent> ExtractText(
 ```csharp
 [FunctionName("LeaseClassifier")]
 public static async Task<LeaseClassification> ClassifyLease(
-    [ActivityTrigger] ExtractedContent content,
+    [ActivityTrigger] StructuredContent content,
     ILogger log)
 {
-    // Azure OpenAI Service使用
-    // IFRS 16 / ASC 842の判定基準に基づく分類
+    // Azure OpenAI Service使用 (Phase 2)
+    // 構造化されたコンテンツを基にリース判定
+    // IFRS 16 / ASC 842の判定基準を適用:
+    
     // 1. 特定された資産の識別
-    // 2. 使用権の制御権の評価
+    var identifiedAssetAnalysis = await AnalyzeIdentifiedAsset(content);
+    
+    // 2. 使用権の制御権の評価  
+    var controlRightsAnalysis = await AnalyzeControlRights(content);
+    
     // 3. 実質的な代替権の分析
+    var substitutionRightsAnalysis = await AnalyzeSubstitutionRights(content);
+    
+    // OpenAI GPT-4で総合判定
+    var leaseClassification = await openAIClient.GetChatCompletionsAsync(
+        BuildLeaseAnalysisPrompt(content, identifiedAssetAnalysis, 
+            controlRightsAnalysis, substitutionRightsAnalysis));
+    
+    return ParseLeaseClassificationResponse(leaseClassification);
 }
 ```
 
@@ -315,23 +373,34 @@ Client → Direct Blob Upload (PUT) → Blob Storage
                                 File Metadata Saved
 ```
 
-### 2. 解析実行フロー
+### 2. ハイブリッド解析実行フロー
 
 ```
 Client Request → Analysis API → Durable Function Orchestrator
                                      ↓
-                            Activity 1: DocumentParser
-                          (Blob Storage → Document Intelligence)
+                            Phase 1: DocumentParser
+                     (Blob Storage → Document Intelligence API)
+                        高精度OCR + 構造化解析
                                      ↓
-                            Activity 2: TextExtractor
-                          (Structured Content Extraction)
+                            Phase 2: ContentStructurer  
+                        (契約書固有の構造認識・前処理)
+                         セクション識別 + メタデータ抽出
                                      ↓
-                            Activity 3: LeaseClassifier
-                          (OpenAI → IFRS/ASC Analysis)
+                            Phase 3: LeaseClassifier
+                      (OpenAI Service → IFRS/ASC判定)
+                        構造化データ + 意味理解 + リース判定
                                      ↓
-                            Activity 4: ReportGenerator
-                          (Result Generation → Blob Storage)
+                            Phase 4: ReportGenerator
+                        (統合結果 → Blob Storage保存)
 ```
+
+### ハイブリッド方式の利点
+
+1. **高精度**: Document Intelligenceの正確な文書解析
+2. **高度理解**: OpenAIの意味理解とコンテキスト判定
+3. **構造化**: 段階的な処理による品質向上
+4. **デバッグ容易**: 各フェーズの結果を個別に確認可能
+5. **コスト効率**: 必要な部分のみでOpenAI APIを使用
 
 ### 3. 結果取得フロー
 

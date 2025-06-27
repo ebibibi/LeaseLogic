@@ -209,6 +209,9 @@ if [ "$SKIP_INFRASTRUCTURE" = false ]; then
         
         # Extract outputs
         FUNCTION_APP_NAME=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.functionAppName.value')
+        FUNCTION_APP_URL=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.functionAppUrl.value')
+        FRONTEND_WEB_APP_NAME=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.frontendWebAppName.value')
+        FRONTEND_WEB_APP_URL=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.frontendWebAppUrl.value')
         STORAGE_ACCOUNT_NAME=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.storageAccountName.value')
         OPENAI_ENDPOINT=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.openAIEndpoint.value')
         DOC_INTEL_ENDPOINT=$(echo $DEPLOYMENT_RESULT | jq -r '.outputs.documentIntelligenceEndpoint.value')
@@ -216,6 +219,7 @@ if [ "$SKIP_INFRASTRUCTURE" = false ]; then
         
         print_status "Deployment outputs:"
         print_status "  Function App: $FUNCTION_APP_NAME"
+        print_status "  Frontend Web App: $FRONTEND_WEB_APP_NAME"
         print_status "  Storage Account: $STORAGE_ACCOUNT_NAME"
         print_status "  OpenAI Endpoint: $OPENAI_ENDPOINT"
         print_status "  Document Intelligence: $DOC_INTEL_ENDPOINT"
@@ -225,6 +229,9 @@ if [ "$SKIP_INFRASTRUCTURE" = false ]; then
         cat > deployment-outputs.json << EOF
 {
     "functionAppName": "$FUNCTION_APP_NAME",
+    "functionAppUrl": "$FUNCTION_APP_URL",
+    "frontendWebAppName": "$FRONTEND_WEB_APP_NAME",
+    "frontendWebAppUrl": "$FRONTEND_WEB_APP_URL",
     "storageAccountName": "$STORAGE_ACCOUNT_NAME",
     "openAIEndpoint": "$OPENAI_ENDPOINT",
     "documentIntelligenceEndpoint": "$DOC_INTEL_ENDPOINT",
@@ -356,11 +363,17 @@ print_header "Step 5: Next Steps"
 print_status "Deployment completed successfully! 🎉"
 echo ""
 print_status "Next steps:"
-print_status "1. 📄 Upload accounting standards documents to the 'standards' container"
-print_status "2. 🤖 Configure OpenAI Assistant with reference documents"
-print_status "3. 🧪 Test the API endpoints"
-print_status "4. 📊 Set up monitoring and alerts"
-print_status "5. 🔒 Configure authentication and CORS settings"
+print_status "1. 🌐 Access the frontend at: $FRONTEND_WEB_APP_URL"
+print_status "2. 📄 Upload accounting standards documents to the 'standards' container"
+print_status "3. 🤖 Configure OpenAI Assistant with reference documents"
+print_status "4. 🧪 Test contract analysis through the web interface"
+print_status "5. 📊 Set up monitoring and alerts"
+print_status "6. 🔒 Configure authentication and CORS settings"
+
+echo ""
+print_status "Access URLs:"
+print_status "  Frontend Web App: $FRONTEND_WEB_APP_URL"
+print_status "  API Backend: https://$FUNCTION_APP_NAME.azurewebsites.net"
 
 echo ""
 print_status "Quick API test:"
@@ -372,6 +385,7 @@ echo ""
 print_status "Monitoring:"
 print_status "  Azure Portal: https://portal.azure.com/#@/resource/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME"
 print_status "  Function App: https://portal.azure.com/#@/resource/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/sites/$FUNCTION_APP_NAME"
+print_status "  Frontend Web App: https://portal.azure.com/#@/resource/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/sites/$FRONTEND_WEB_APP_NAME"
 
 echo ""
 print_success "🚀 LeaseLogic deployment completed successfully!"
@@ -390,3 +404,52 @@ cat > deployment-summary.json << EOF
 EOF
 
 print_status "Deployment summary saved to: deployment-summary.json"
+
+# Step 6: Frontend Deployment (if Node.js is available)
+if command -v node &> /dev/null && command -v npm &> /dev/null; then
+    print_header "Step 6: Frontend Deployment"
+    
+    if [ -n "$FRONTEND_WEB_APP_NAME" ]; then
+        print_status "Building and deploying frontend application..."
+        cd frontend
+        
+        # Install dependencies
+        print_status "Installing Node.js dependencies..."
+        npm install
+        
+        # Set environment variable for build
+        export REACT_APP_API_BASE_URL="https://$FUNCTION_APP_NAME.azurewebsites.net"
+        
+        # Build the application
+        print_status "Building React application..."
+        npm run build
+        
+        # Deploy to Azure App Service
+        print_status "Deploying to Azure App Service: $FRONTEND_WEB_APP_NAME"
+        if [ -d "build" ]; then
+            cd build
+            zip -r ../build.zip . > /dev/null
+            cd ..
+            
+            az webapp deployment source config-zip \
+                --resource-group "$RESOURCE_GROUP_NAME" \
+                --name "$FRONTEND_WEB_APP_NAME" \
+                --src build.zip
+            
+            print_success "Frontend deployed successfully!"
+            rm -f build.zip
+        else
+            print_error "Build directory not found. Frontend build may have failed."
+        fi
+        
+        cd ..
+    else
+        print_warning "Frontend Web App name not available. Skipping frontend deployment."
+    fi
+else
+    print_header "Step 6: Frontend Deployment (SKIPPED)"
+    print_warning "Node.js and npm not found. Skipping frontend deployment."
+    print_status "To deploy frontend manually:"
+    print_status "1. cd frontend && npm install && npm run build"
+    print_status "2. Deploy build folder to Azure App Service"
+fi

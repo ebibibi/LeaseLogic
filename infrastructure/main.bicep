@@ -354,9 +354,22 @@ resource tableContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-0
   }
 }
 
+// Deploy Frontend App Service
+module frontend 'frontend.bicep' = {
+  name: 'frontend-deployment'
+  params: {
+    environment: environment
+    location: location
+    uniqueSuffix: uniqueSuffix
+    functionAppName: functionApp.name
+  }
+}
+
 // Outputs
 output functionAppName string = functionApp.name
 output functionAppUrl string = 'https://${functionApp.properties.defaultHostName}'
+output frontendWebAppName string = frontend.outputs.frontendWebAppName
+output frontendWebAppUrl string = frontend.outputs.frontendWebAppUrl
 output storageAccountName string = storageAccount.name
 output openAIEndpoint string = openAIAccount.properties.endpoint
 output documentIntelligenceEndpoint string = documentIntelligence.properties.endpoint

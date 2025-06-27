@@ -1,0 +1,29 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "FUNCTIONS_EXTENSION_VERSION": "~4",
+    
+    "AZURE_OPENAI_ENDPOINT": "",
+    "AZURE_OPENAI_API_KEY": "",
+    "DOCUMENT_INTELLIGENCE_ENDPOINT": "",
+    "DOCUMENT_INTELLIGENCE_API_KEY": "",
+    "STORAGE_CONNECTION_STRING": "UseDevelopmentStorage=true",
+    "KEY_VAULT_URI": "",
+    
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": "",
+    
+    "GPT4_DEPLOYMENT_NAME": "gpt-4",
+    "GPT4_TURBO_DEPLOYMENT_NAME": "gpt-4-turbo",
+    "EMBEDDING_DEPLOYMENT_NAME": "text-embedding-ada-002",
+    
+    "LEASE_ASSISTANT_ID": "",
+    "ACCOUNTING_STANDARDS_VECTOR_STORE_ID": ""
+  },
+  "Host": {
+    "LocalHttpPort": 7071,
+    "CORS": "*",
+    "CORSCredentials": false
+  }
+}
